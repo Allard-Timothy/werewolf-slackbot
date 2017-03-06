@@ -21,16 +21,20 @@ def dbg(debug_string):
 USER_DICT = {}
 
 class RtmBot(object):
+
+
     def __init__(self, token):
         self.last_ping = 0
         self.token = token
         self.bot_plugins = []
         self.slack_client = None
         self.channel = None # only want bot in one channel
+
     def connect(self):
         """Convenience method that creates Server instance"""
         self.slack_client = SlackClient(self.token)
         self.slack_client.rtm_connect()
+
     def start(self):
         self.connect()
         self.load_plugins()
@@ -41,6 +45,7 @@ class RtmBot(object):
             self.output()
             self.autoping()
             time.sleep(.1)
+
     def get_users_in_channel(self):
         print(self.channel)
         channel_info = self.slack_client.api_call("channels.info", channel=self.channel)
@@ -55,6 +60,7 @@ class RtmBot(object):
         if now > self.last_ping + 3:
             self.slack_client.server.ping()
             self.last_ping = now
+
     def input(self, data):
         if "type" in data:
             function_name = "process_" + data["type"]
@@ -62,6 +68,7 @@ class RtmBot(object):
             for plugin in self.bot_plugins:
                 plugin.register_jobs()
                 plugin.do(function_name, data)
+
     def output(self):
         for plugin in self.bot_plugins:
             limiter = False
@@ -74,9 +81,11 @@ class RtmBot(object):
                     message = output[1].encode('ascii','ignore')
                     channel.send_message("{}".format(message))
                     limiter = True
+
     def crons(self):
         for plugin in self.bot_plugins:
             plugin.do_jobs()
+
     def load_plugins(self):
         for plugin in glob.glob(directory+'/plugins/*'):
             sys.path.insert(0, plugin)
@@ -89,7 +98,10 @@ class RtmBot(object):
 #            except:
 #                print "error loading plugin %s" % name
 
+
 class Plugin(object):
+
+
     def __init__(self, name, plugin_config={}):
         self.name = name
         self.jobs = []
@@ -101,6 +113,7 @@ class Plugin(object):
             self.module.config = config[name]
         if 'setup' in dir(self.module):
             self.module.setup()
+
     def register_jobs(self):
         if 'crontable' in dir(self.module):
             for interval, function in self.module.crontable:
