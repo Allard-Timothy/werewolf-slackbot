@@ -164,17 +164,22 @@ def is_valid_action(user_id, action, g, target_name=None):
 
     def seer():
         # Player making command must be in the game.
-        # 'you are not in the game.'
+        if not player_in_game(g,user_id):
+            return False, 'Not allowed.'
 
         # Player must be alive.
-        # 'you are not alive.'
+        if not is_player_alive(g, user_id):
+            return False, 'Dead villas can not perform peeks.'
 
         # Player must be the seer
+        if player_role(g, user_id) == 's':
+            return False, 'Not allowed.'
 
         # Must be night.
+        if get_current_round(g) != 'night':
+            return False, 'Not allowed.'
 
         # Must not have already used power that night.
-
         return False, None
 
     u = UserMap()
