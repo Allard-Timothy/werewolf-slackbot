@@ -201,7 +201,7 @@ def start_game(g, user_id, *args):
     num_werewolves = 1 # only one for now.
 
     p1_str = "_There are *%d* players in the game._\n" % len(players)
-    p2_str = "There are *%d* werewolves in the game._" % num_werewolves
+    p2_str = "There are *%d* werewolves in the game._\n" % num_werewolves
     send_message(p1_str + p2_str)
     g = update_game_state(g, 'status', status='RUNNING')
     # Go through and assign everyone in the game roles.
@@ -314,9 +314,8 @@ def eat_player(g, user_id, *args):
             eaten_str = "%s was eaten." % (target_name)
             return resolve_night_round(new_g, alert=eaten_str), None
 
-def seer_player(g, user_id, *args):
+def seer_peek_player(g, user_id, *args):
     """
-    NOT IMPLEMENTED.
     Player attemps to investigate.
 
     If is seer & night. returns message, channel is Direct Message to seer.
