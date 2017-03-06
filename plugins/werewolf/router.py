@@ -6,7 +6,8 @@ from game_actions import(
     eat_player,
     player_vote,
     list_votes,
-    start_countdown
+    start_countdown,
+    seer_peek_player,
 )
 
 
@@ -39,6 +40,7 @@ def command_router(g, command, user_id):
         "join": join,
         "countdown": start_countdown,
 
+        "peek": seer_peek_player,
         "kill": eat_player,
         "vote": player_vote
 
