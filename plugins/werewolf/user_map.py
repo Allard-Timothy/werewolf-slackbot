@@ -48,9 +48,9 @@ def get_user_name(user_id):
     u = UserMap()
 
     def poll_slack_for_user():
-        user_obj = json.loads(sc.api_call('users.info', user=user_id))
+        user_obj = sc.api_call('users.info', user=user_id)
         user_name = user_obj['user']['name']
-        im = json.loads(sc.api_call('im.open', user=user_id))
+        im = sc.api_call('im.open', user=user_id)
         return user_name, im['channel']['id']
 
     try:
