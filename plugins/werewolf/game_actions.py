@@ -11,108 +11,81 @@ import time
 from user_map import UserMap, get_user_name
 from validations import mod_valid_action, is_valid_action
 
-from status import (
-        players_in_game,
-        player_in_game,
-        is_player_alive,
-        alive_for_village,
-        alive_for_werewolf,
-        for_werewolf,
-        player_role,
-        player_side,
-        player_status,
-        has_voted,
-        did_everyone_vote,
-        get_all_alive,
-        get_all_votes,
-        get_current_round,
-        does_have_night_action,
-)
+from status import (players_in_game,
+                    player_in_game,
+                    is_player_alive,
+                    alive_for_village,
+                    alive_for_werewolf,
+                    for_werewolf,
+                    player_role,
+                    player_side,
+                    player_status,
+                    has_voted,
+                    did_everyone_vote,
+                    get_all_alive,
+                    get_all_votes,
+                    get_current_round,
+                    does_have_night_action)
 
 
 u = UserMap()
 
-###############
-# UI Commands #
-###############
 
-def list_players(g, user_id, *args):
-    """
+def list_players(game_state, user_id, *kwargs):
+    """List all the current players in the game."""
+    user_map = UserMap()
+    players = players_in_game(game_state)
 
-    * args is args to command list
-    g -> string to Slack of players
-      -> "\n".join([list of players])
-
-      "player_name"|"status"
-
-    """
-    u = UserMap()
-
-    # gets all names.
-    return '\n'.join([u.get(user_id=p_id) + ' | ' + player_status(g, p_id)
-                    for p_id in players_in_game(g)]), None
+    return '\n'.join([user_map.get(user_id=player_id) + ' | ' + player_status(game_status, player_id) for player_id in players]), None
 
 
+def list_votes(game_state, *kwargs):
+    """List all votes from players int he game."""
+    votes = get_all_votes(game_state)
 
-def list_votes(g, *args):
-    """
-    Print a list of all the people alive.
-
-    votes is a dictionary with-
-    key: voter_id
-    value: voted_on_id
-
-    """
-    votes = get_all_votes(g)
     out_list = []
     if votes:
-        u = UserMap()
-        # turn id's into names
-        # voter ' voted ' votee
-        for v_id in votes.keys():
-            voter_name = u.get(user_id=v_id)
-            votee_name = u.get(user_id=votes[v_id])
+        user_map = UserMap()
+        for voter_id in votes.keys():
+            voter_name = user_map.get(user_id=voter_id)
+            votee_name = user_map.get(user_id=votes[voter_id])
+
             if votee_name:
-                tmp = voter_name + ' voted ' + votee_name
+                vote_mess = voter_name + ' voted ' + votee_name
             else:
-                tmp = voter_name + ' passed.'
-            out_list.append(tmp)
+                vote_mess = voter_name + ' passed'
+
+            out_list.append(vote_mess)
 
         return '\n'.join(out_list), None
 
-    return 'Cannot list votes now.', None
+    return 'Cannot list votes now', None
 
-""" fn's to add to crontable """
+
 def annoy():
     check_bool, msg = check()
+
     if not check_bool:
-        # not time to start countdown
         return msg, None
+
     print('hi')
 
-def start_countdown(g, user_id, *args):
-    """
-    If during day and waiting on one more player to vote.
 
-    Messages that player.
-
-    If they take too long, their vote becomes a pass.
-
+def start_countdown(game_state, user_id, *kwargs):
+    """Start a countdown when it's day time in order to push inactive players to vote.
+    We'll send them an annoyance ping and then `pass` their vote if they don't vote. 
     """
     import threading
+
     def check():
-        # who hasn't voted.
-        # if round is still day
-        check_g = get_game_state() # make sure state hasn't changed.
-        result, message = mod_valid_action(user_id, 'countdown', check_g)
+        check_game = get_game_state()
+
+        result, message = mod_valid_action(user_id, 'countdown', check_game)
         if not result:
             return False, message
 
-        all_alive = get_all_alive(g)
-        yet_to_vote_list = [
-                p_id for p_id in all_alive
-                if not has_voted(g, p_id)]
-
+        all_alive = get_all_alive(game_state)
+        yet_to_vote_list = [player_id for player_id in all_alive if not has_voted(game_state, player_id)]
         if len(yet_to_vote_list) > 1:
             return False, 'Countdown cannot start now.'
 
@@ -121,175 +94,134 @@ def start_countdown(g, user_id, *args):
 
     def callback_vote():
         check_bool, yet_to_vote = check()
-        print('checking vote')
-        print(check_bool, yet_to_vote)
         if check_bool:
-            check_g = get_game_state()
-            send_message(player_vote(check_g, yet_to_vote, ['vote', 'pass'])[0])
+            check_game = get_game_state()
+            send_message(player_vote(check_game, yet_to_vote, ['vote', 'pass'])[0])
 
-    check_bool, msg = check()
+    check_bool, message = check()
     if not check_bool:
-        # not time to start countdown
-        return msg, None
+        return message, None
 
-    print('sending message')
-    message_str = 'Countdown started. *20 seconds* left.\n ' + u.get(user_id=msg) + ' please vote. Or your vote will be passed.'
+    message_str = 'Countdown started. 60 seconds left.\n ' + u.get(user_id=msg) + ' please vote. Or your vote will be passed.'
 
-    t = threading.Timer(20.0, callback_vote)
+    t = threading.Timer(60.0, callback_vote)
     t.start()
 
     return message_str, None
 
 
-################
-# Game Actions #
-################
-
-def create_game(g, user_id, *args):
+def create_game(game_state, user_id, *kwargs):
+    """Create a new werewolf game, reset the game_state of previous games, and announce
+    that we're waiting for players to join. Set game status as `WAITING_FOR_JOIN`
     """
-    Reset state.
-    Let people join.
-    annouce
+    result, message = mod_valid_action(user_id, 'create', game_state)
 
-    STATUS -> "WAITING_FOR_JOIN"
-
-    """
-
-    # testing if i can append to outputs here.
-
-    # Can only create a game
-    #   if g['STATUS'] == 'INACTIVE'
-    result, message = mod_valid_action(user_id, 'create', g)
     if result:
-        # allowed to create game
-        if g['STATUS'] != 'INACTIVE':
+        if game_state['STATUS'] != 'INACTIVE':
             return 'Can not create new game.', None
-        # reset game state.
-        new_g = update_game_state(g, 'reset_game_state')
-        # change game status to WAITING
-        new_g = update_game_state(new_g, 'status', status='WAITING_FOR_JOIN')
-        # send message to channel
-        return '_Waiting for players..._ \n*Type !join to join.*', None
+
+        new_game = update_game_state(game_state, 'reset_game_state')
+        new_game = update_game_state(new_game, 'status', status='WAITING_FOR_JOIN')
+
+        return 'Waiting for players... \n*Type !join to join.*', None
+
     else:
-        return message, None # return error message, and basic channel.
-
-
-def start_game(g, user_id, *args):
-    """
-    Check if enough players.
-    (optional) Pick config setup that works w/ num of players.
-    Outut to channel (@channel) game is starting.
-    Assign Roles.
-    Message Users their roles.
-
-    STATUS -> "RUNNING"
-    """
-    # can only start a game
-    #   if enough players
-    #   if g['STATUS'] == 'WAITING_FOR_JOIN'
-
-    result, message = mod_valid_action(user_id, 'start', g)
-    if not result:
-        # cant start
-        print(result, message)
         return message, None
 
-    # tell everyone the game is starting
+
+def start_game(game_state, user_id, *kwargs):
+    """Start the game and set game status to `RUNNING`."""
+    result, message = mod_valid_action(user_id, 'start', game_state)
+    if not result:
+        return message, None
+
     send_message("@channel: Game is starting...")
-    """ message everyone details of game. """
-    players = players_in_game(g)
-    num_werewolves = 1 # only one for now.
+    players = players_in_game(game_state)
+    num_werewolves = werewolf_in_game(game_state)
 
     p1_str = "_There are *%d* players in the game._\n" % len(players)
-    p2_str = "There are *%d* werewolves in the game._\n" % num_werewolves
+    p2_str = "There are *%d* werewolves in the game._\n" % len(num_werewolves)
     send_message(p1_str + p2_str)
-    g = update_game_state(g, 'status', status='RUNNING')
-    # Go through and assign everyone in the game roles.
-    new_g = assign_roles(g) # updated state w/ roles
-    message_everyone_roles(new_g)
 
-    # go to night round.
+    game_state = update_game_state(game_state, 'status', status='RUNNING')
 
-    return start_day_round(new_g), None # idk when this will return.
+    new_game = assign_roles(game_state)
+    message_everyone_roles(new_game)
 
+    return start_day_round(new_game), None
 
 
-def assign_roles(g):
-    players = players_in_game(g)
-    create_wolf = random.choice(players) # id of player
-    new_g = copy.deepcopy(g)
+def assign_roles(game_state):
+    """Assign all players in the game a role."""
+    total_players = players_in_game(game_state)
 
-    for player in players:
-        if player == create_wolf:
-            new_g = update_game_state(new_g, 'role', player=player, role='w')
-        else:
-            new_g = update_game_state(new_g, 'role', player=player, role='v')
-    return new_g
+    # 3 or fewer wolves for 11 - 23 players
+    if len(total_players) >= 11 and len(total_players) < 23:
+        wolf_div = 4
+
+    # more than 3 wolves for 23+ players
+    elif len(total_players) >= 23:
+        wolf_div = 3
+
+    num_of_wolfs = int(len(total_players) / wolf_div)
+
+    created_wolves = random.sample(total_players, num_of_wolfs)
+    created_villas = [player for player in total_players if player not in created_wolves]
+
+    new_game = copy.deepcopy(game_state)
+
+    for villa in created_villas:
+        new_game = update_game_state(new_game, 'role', player=villa, role='v')
+
+    for wolf in created_wolves:
+        new_game = update_game_state(new_game, 'role', player=wolf, role='w')
+
+    return new_game
 
 
-def message_everyone_roles(g):
-    """
-    for every player in game.
-    DM them their roles.
+def message_everyone_roles(game_state):
+    """Ping players with their roles."""
+    user_map = UserMap()
 
-    """
-    u = UserMap()
-    # player_role(g, player_id)
+    role_message_mapping = {
+        'v': " Plain Villager",
+        'w': " Werewolf Awoooo!",
+        's': " Seer",
+        'a': " Angel"
+    }
 
-    all_alive = [(u.get(user_id=p_id, DM=True), player_role(g, p_id))
-                for p_id in players_in_game(g)
-                    if is_player_alive(g, p_id)]
+    def _player_tuple(player_id, game_state):
 
-    print(all_alive)
+        return (user_map.get(user_id=player_id, DM=True), player_role(game_state, player_id))
+
+    all_alive = [_player_tuple(player_id, game_state) for player_id in players_in_game(game_state) if is_player_alive(game_state, player_id)]
 
     for im, role in all_alive:
-        if role=='v':
-            nice=" Plain Villager"
-        elif role=='w':
-            nice=" Werewolf. *Awoooo!*"
-        elif role=='s':
-            nice=" Seer."
-        elif role=='b':
-            nice=" Bodyguard."
-        send_message(nice, channel=im)
+        dm_message = role_message_mapping[role]
+        send_message(dm_message, channel=im)
 
-def join(g, user_id, *args):
-    """
-    See if player is allowed to join.
-    If so let add them to the game.
 
-    """
-    result, message = mod_valid_action(user_id, 'join', g)
+def join(game_state, user_id, *args):
+    """Join the game if the player hasn't joined yet."""
+    result, message = mod_valid_action(user_id, 'join', game_state)
 
     if not result:
-        return message, None # could not join
+        return message, None
 
-    # if player successfully joins.
-    u = UserMap()
-
-    user_name = u.get(user_id=user_id)
+    user_map = UserMap()
+    user_name = user_map.get(user_id=user_id)
 
     if not user_name:
-        # user not in user_map yet
-        # get_user_name polls slack and adds to user map
         user_name = get_user_name(user_id)
 
-    # update state with new player
-    mutated_g = update_game_state(g, 'join', player=user_id)
+    new_game_w_new_player = update_game_state(game_state, 'join', player=user_id)
 
-    # tell the channel the player joined.
     join_message = "%s joined the game." % user_name
     return join_message, None
 
-def eat_player(g, user_id, *args):
-    """
-    ex. *args = (['kill', 'maksym'], )
-    arg_list =
-    target_name = args[1]
 
-    user_name = u.id_dict.get(user_id)
-
-    """
+def eat_player(game_state, user_id, *args):
+    """Night kill the selected player."""
     arg_list = args[0]
 
     if len(arg_list) < 1: # no target no good
@@ -313,6 +245,7 @@ def eat_player(g, user_id, *args):
             # tell the players.
             eaten_str = "%s was eaten." % (target_name)
             return resolve_night_round(new_g, alert=eaten_str), None
+
 
 def seer_peek_player(g, user_id, *args):
     """

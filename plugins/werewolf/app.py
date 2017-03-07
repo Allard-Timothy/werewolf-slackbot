@@ -1,6 +1,4 @@
-"""
-July 10th, 2015
-werewolf refactor
+"""Main App to process messages from 
 """
 import time
 import math
@@ -17,26 +15,24 @@ from router import command_router
 from send_message import send_message
 
 
-# main entry into the app.
-def process_message(data, g=None): # g=None so we can tests.
+def process_message(data, game_state=None):
+    """Process messages from players and from the game actions."""
     message = data.get('text', '')
-    if message.startswith('!'): # trigger is "!"
 
-        if not g: # if g is not set get game state.
-            g_copy = copy.deepcopy(change_state.get_game_state())
+    if message.startswith('!'):
+        if not game_state:
+            game_state_copy = copy.deepcopy(change_state.get_game_state())
         else:
-            g_copy = copy.deepcopy(g)
+            game_state_copy = copy.deepcopy(game_state)
 
-        command = message[1:].split(" ") # everything after !
+        game_action = message[1:].split(" ")
+        game_response, channel = command_router(game_state_copy, game_action, data['user'])
 
-        # let the router deal with this nonsense
-        game_response, channel = command_router(g_copy, command, data['user'])
         if channel:
             send_message(game_response, channel)
         else:
             send_message(game_response)
+
         return game_response
+
     return None
-
-
-# hmset uid:1:transform fn 'vote' args player 'nick' status 'alive'
