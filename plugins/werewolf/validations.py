@@ -9,6 +9,8 @@ from status import (players_in_game,
 
 from user_map import UserMap
 
+from change_state import update_game_state
+
 
 RESPONSE = {
         'already_joined': "You have already joined game",
@@ -33,64 +35,6 @@ RESPONSE = {
         'dead_wolf': "Dead wolves cannot perform kills"
     }
 
-MOD_ACTION_MAPPING = {
-    'create': can_create,
-    'start': can_start,
-    'join': can_join,
-    'countdown': can_countdown
-}
-
-PLAYER_ACTION_MAPPING = {
-    'night_kill': night_kill,
-    'vote': vote,
-    'peek': peek,
-}
-
-
-def mod_valid_action(user_id, action, game_state):
-    """Mod actions to manage and facilitate game_state.
-
-    Mod actions:
-      `create`
-      `start`
-      `join`
-      `countdown`
-    """
-    action_response_fn = MOD_ACTION_MAPPING.get(action, None)
-
-    if action_response_fn:
-        return action_response_fn(user_id, action, game_state) if action_response_fn
-
-    return False, RESPONSE['invalid']
-
-
-def is_valid_action(user_id, action, game_state, target_name=None):
-    """Determine if the provided in-game player action should be executed or not.
-
-    In-game player actions:
-      `vote`
-      `night_kill(wolf night aciton)`
-      `peek(seer night action)`
-      `save(angel night action)`
-    """
-    user_map = UserMap()
-
-    if not target_name:
-        return False, RESPONSE['need_target']
-
-    if user_map:
-        target_id = user_map.get(name=target_name)
-        user_name = user_map.get(user_id)
-
-        if not target_id and target_name != 'pass':
-            return False, RESPONSE['user_n_in_game']
-
-    player_action_fn = PLAYER_ACTION_MAPPING.get(action, None)
-    if player_action_fn:
-        return player_action_fn(user_id, action, game_state, target_name)
-
-    return False, RESPONSE['invalid']
-
 
 def can_create(user, action, game_state):
     """Create a new game."""
@@ -100,9 +44,10 @@ def can_create(user, action, game_state):
 def can_start(user_id, action, game_state):
     """Check if we should start a new game"""
     players = players_in_game(game_state)
+    print players
 
     # min for a good game is 11
-    if len(players) < 11:
+    if len(players) < 1:
         return False, RESPONSE['num_players']
 
     if game_state.get('STATUS') != 'WAITING_FOR_JOIN':
@@ -139,18 +84,22 @@ def can_countdown(user_id, action, game_state):
        return False, RESPONSE['no_countdown']
 
 
-def vote():
+def vote(user_id, action, game_state, target_name):
+    user_map = UserMap()
+    target_id = user_map.get(name=target_name)
+    user_name = user_map.get(user_id)
+
     if not player_in_game(game_state, user_id):
         return False, RESPONSE['u_not_in_game']
 
     if not is_player_alive(game_state, user_id):
         return False, RESPONSE['u_not_alive']
 
-    if get_current_round(g) != 'day':
+    if get_current_round(game_state) != 'day':
         return False, RESPONSE['not_day']
 
     if target_name == 'pass':
-        return True, user_name + RESPONSE['target_name']
+        return True, user_name + RESPONSE['pass']
 
     if not player_in_game(game_state, target_id):
         return False, RESPONSE['t_not_in_game']
@@ -164,39 +113,109 @@ def vote():
     return True, user_name + ' voted for ' + '*' + target_name + '*'
 
 
-def night_kill():
-    if not player_in_game(g,user_id):
+def night_kill(user_id, action, game_state, target_name):
+    user_map = UserMap()
+    target_id = user_map.get(name=target_name)
+    user_name = user_map.get(user_id)
+
+    if not player_in_game(game_state,user_id):
         return False, RESPONSE['noop']
 
-    if player_role(g, user_id) != 'w':
+    if player_role(game_state, user_id) != 'w':
         return False, RESPONSE['noop']
 
-    if not is_player_alive(g, user_id):
+    if not is_player_alive(game_state, user_id):
         return False, 'Dead wolves can not kill.'
 
-    if get_current_round(g) != 'night':
+    if get_current_round(game_state) != 'night':
         return False, RESPONSE['noop']
 
-    if not player_in_game(g, target_id):
+    if not player_in_game(game_state, target_id):
         return False, RESPONSE['noop']
 
-    if not is_player_alive(g, target_id):
+    if not is_player_alive(game_state, target_id):
         return False, RESPONSE['noop']
 
     return True, ""
 
 
-def peek():
-    if not player_in_game(g,user_id):
+def peek(user_id, action, game_state, target_name):
+    user_map = UserMap()
+    target_id = user_map.get(name=target_name)
+    user_name = user_map.get(user_id)
+
+    if not player_in_game(game_state,user_id):
         return False, RESPONSE['noop']
 
-    if not is_player_alive(g, user_id):
+    if not is_player_alive(game_state, user_id):
         return False, RESPONSE['dead_villa']
 
-    if player_role(g, user_id) == 's':
+    if player_role(game_state, user_id) == 's':
         return False, RESPONSE['noop']
 
-    if get_current_round(g) != 'night':
+    if get_current_round(game_state) != 'night':
         return False, RESPONSE['noop']
+
+    target_role = player_role(game_state, target_name)
+
 
     return False, None
+
+
+MOD_ACTION_MAPPING = {
+    'create': can_create,
+    'start': can_start,
+    'join': can_join,
+    'countdown': can_countdown
+}
+
+PLAYER_ACTION_MAPPING = {
+    'night_kill': night_kill,
+    'vote': vote,
+    'peek': peek,
+}
+
+
+def mod_valid_action(user_id, action, game_state):
+    """Mod actions to manage and facilitate game_state.
+
+    Mod actions:
+      `create`
+      `start`
+      `join`
+      `countdown`
+    """
+    action_response_fn = MOD_ACTION_MAPPING.get(action, None)
+
+    if action_response_fn:
+        return action_response_fn(user_id, action, game_state)
+
+    return False, RESPONSE['invalid']
+
+
+def is_valid_action(user_id, action, game_state, target_name=None):
+    """Determine if the provided in-game player action should be executed or not.
+
+    In-game player actions:
+      `vote`
+      `night_kill(wolf night aciton)`
+      `peek(seer night action)`
+      `save(angel night action)`
+    """
+    user_map = UserMap()
+
+    if not target_name:
+        return False, RESPONSE['need_target']
+
+    if user_map:
+        target_id = user_map.get(name=target_name)
+        user_name = user_map.get(user_id)
+
+        if not target_id and target_name != 'pass':
+            return False, RESPONSE['user_n_in_game']
+
+    player_action_fn = PLAYER_ACTION_MAPPING.get(action, None)
+    if player_action_fn:
+        return player_action_fn(user_id, action, game_state, target_name)
+
+    return False, RESPONSE['invalid']

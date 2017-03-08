@@ -40,15 +40,12 @@ def get_game_state():
 
 def set_game_state(new_game_state):
     global GAME_STATE
-    # set game state
     GAME_STATE = copy.deepcopy(new_game_state)
     r_server.set('game:state', json.dumps(new_game_state))
 
 
-def update_game_state(g, action, **kwargs):
-    """
-    Only place we are allowed to change game state.
-    If we save an ordered list of all game states,
+def update_game_state(game_state, action, **kwargs):
+    """Only place we are allowed to change game state. If we save an ordered list of all game states,
     it'd be possible to undo/redo all steps. And do automated replays.
 
     ex. Game State N: [G0, G1, G2, G3... Gn]
@@ -111,7 +108,7 @@ def update_game_state(g, action, **kwargs):
         mutated_g['STATUS'] = new_state['STATUS']
 
 
-    mutated_g = copy.deepcopy(g)
+    mutated_g = copy.deepcopy(game_state)
 
     if action=='player_status':
         change_player_status()

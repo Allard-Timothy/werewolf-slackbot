@@ -36,7 +36,7 @@ def list_players(game_state, user_id, *kwargs):
     user_map = UserMap()
     players = players_in_game(game_state)
 
-    return '\n'.join([user_map.get(user_id=player_id) + ' | ' + player_status(game_status, player_id) for player_id in players]), None
+    return '\n'.join([user_map.get(user_id=player_id) + ' | ' + player_status(game_state, player_id) for player_id in players]), None
 
 
 def list_votes(game_state, *kwargs):
@@ -76,6 +76,7 @@ def start_countdown(game_state, user_id, *kwargs):
     We'll send them an annoyance ping and then `pass` their vote if they don't vote. 
     """
     import threading
+    user_map = UserMap()
 
     def check():
         check_game = get_game_state()
@@ -102,7 +103,7 @@ def start_countdown(game_state, user_id, *kwargs):
     if not check_bool:
         return message, None
 
-    message_str = 'Countdown started. 60 seconds left.\n ' + u.get(user_id=msg) + ' please vote. Or your vote will be passed.'
+    message_str = 'Countdown started. 60 seconds left.\n ' + user_map.get(user_id=message) + ' please vote. Or your vote will be passed.'
 
     t = threading.Timer(60.0, callback_vote)
     t.start()
@@ -137,7 +138,7 @@ def start_game(game_state, user_id, *kwargs):
 
     send_message("@channel: Game is starting...")
     players = players_in_game(game_state)
-    num_werewolves = werewolf_in_game(game_state)
+    num_werewolves = alive_for_werewolf(game_state)
 
     p1_str = "_There are *%d* players in the game._\n" % len(players)
     p2_str = "There are *%d* werewolves in the game._\n" % len(num_werewolves)
@@ -154,9 +155,10 @@ def start_game(game_state, user_id, *kwargs):
 def assign_roles(game_state):
     """Assign all players in the game a role."""
     total_players = players_in_game(game_state)
+    wolf_div = 1
 
     # 3 or fewer wolves for 11 - 23 players
-    if len(total_players) >= 11 and len(total_players) < 23:
+    if len(total_players) >= 1 and len(total_players) < 23:
         wolf_div = 4
 
     # more than 3 wolves for 23+ players
@@ -220,62 +222,58 @@ def join(game_state, user_id, *args):
     return join_message, None
 
 
-def eat_player(game_state, user_id, *args):
+def night_kill(game_state, user_id, *args):
     """Night kill the selected player."""
     arg_list = args[0]
 
-    if len(arg_list) < 1: # no target no good
+    if len(arg_list) < 1:
         return "Have to pick a target.", None
-    elif len(arg_list) > 2: # too many args
+
+    elif len(arg_list) > 2:
         return "Not a valid command.", None
+
     else:
-        u = UserMap() # get usermap
+        user_map = UserMap()
 
         target_name = arg_list[1]
-        target_id =  u.get(name=target_name) # turn name into id
-        result, message = is_valid_action(user_id, 'kill', g, target_name=target_name)
+        target_id =  user_map.get(name=target_name)
+        result, message = is_valid_action(user_id, 'kill', game_state, target_name=target_name)
         if not result:
-            # was not a valid kill
             return message, None
+
         else:
-            # player is eaten
-            # update state
-            # changes targeted player's status to dead
-            new_g = update_game_state(g, 'player_status', player=target_id, status='dead')
-            # tell the players.
-            eaten_str = "%s was eaten." % (target_name)
-            return resolve_night_round(new_g, alert=eaten_str), None
+            new_game = update_game_state(game_state, 'player_status', player=target_id, status='dead')
+            eaten_str = "%s was night killed." % (target_name)
+            return resolve_night_round(new_game, alert=eaten_str), None
 
 
-def seer_peek_player(g, user_id, *args):
-    """
-    Player attemps to investigate.
-
-    If is seer & night. returns message, channel is Direct Message to seer.
-
-    ex. *args = (['seer', 'maksym'], )
-    arg_list = args[0]
-    target_name = args[1]
-    """
+def seer_peek_player(game_state, user_id, *args):
+    """Seer can peek a players role during the night."""
     arg_list = args[0]
 
-    if len(arg_list) < 1: # no target no good
+    if len(arg_list) < 1:
         return "Have to pick a target.", None
-    elif len(arg_list) > 2: # too many args
+
+    elif len(arg_list) > 2:
         return "Not a valid command.", None
+
     else:
         target_name = arg_list[1]
         target_id = u.get(name=target_name)
-        #result, message = is_valid_action(user_id, 'seer', g, target_name=target_name)
-        return 'Not Implemented', None
+        result, message = is_valid_action(user_id, 'peek', game_state, target_name=target_name)
+
+        if not result:
+            return message, None
+
+        else:
+            #TODO update game status that seer used peek and send message to seer
+            pass
 
 
-def make_end_round_str(g, alert=None, game_over=None):
-    """
-    g - game state
-    alert - string of any alerts
-    game_over - string of role that won, if game is over.
-    """
+def make_end_round_str(game_state, alert=None, game_over=None):
+    """Reconcile end of day actions and either enter night mode or end game."""
+    user_map = UserMap()
+
     round_end_str = ''
 
     if alert:
@@ -283,214 +281,155 @@ def make_end_round_str(g, alert=None, game_over=None):
 
     if game_over:
         if game_over == 'w':
-            # werewolves won
             round_end_str += "\n Game Over. Werewolves wins.\n"
 
         elif game_over == 'v':
-            # village wins
             round_end_str += "\n Game Over. Village wins.\n"
 
-        # Display list of players and their roles
-        round_end_str += '\n'.join(
-                [u.get(user_id=p_id) + "%s | *%s*." % (u.get(user_id=p_id), player_role(g, p_id))
-                    for p_id in players_in_game(g)])
+        def player_role_string(player_id, game_state):
+            return user_map.get(user_id=player_id) + "%s | %s" % (user_map.get(user_id=player_id), player_role(game_state, player_id))
+
+        player_roles = [player_role_string(player_id, game_state) for player_id in players_in_game(game_state)]
+        round_end_str += '\n'.join(player_roles)
 
     return round_end_str
 
 
-def resolve_night_round(g, alert=None):
+def resolve_night_round(game_state, alert=None):
+    """Reconcile all night actions and update the game_state. The game can either continue into
+    day mode or it will end with the night actions.
     """
-    Makes sure everyone has done all their roles.
-
-    - if yes
-        see if game is over.
-        if yes
-            set game to over.
-            display results.
-        if no
-            change round to day.
-    """
-    # TODO:  for each player in the game,
-    # check if completed their action for the night.
-
-    alive_v = alive_for_village(g)
-    alive_w = alive_for_werewolf(g)
+    alive_v = alive_for_village(game_state)
+    alive_w = alive_for_werewolf(game_state)
 
     if len(alive_w) >= len(alive_v):
-        new_g = update_game_state(g, 'status', status='INACTIVE')
-        # reset game state.
-        new_g = update_game_state(new_g, 'reset_game_state')
+        new_game = update_game_state(game_state, 'status', status='INACTIVE')
+        new_game = update_game_state(new_game, 'reset_game_state')
 
-        return  make_end_round_str(new_g, alert, 'w') # returns and sends message
+        return  make_end_round_str(new_game, alert, 'w')
+
     elif len(alive_w) == 0:
-        new_g = update_game_state(g, 'status', status='INACTIVE')
-        # reset game state.
-        new_g = update_game_state(new_g, 'reset_game_state')
+        new_game = update_game_state(game_state, 'status', status='INACTIVE')
+        new_game = update_game_state(new_game, 'reset_game_state')
 
-        return make_end_round_str(new_g, alert, 'v') # returns and sends message
+        return make_end_round_str(new_game, alert, 'v')
+
     else:
-        # turn it into morning and start day round.
-
-        # idea:
-        # game state has 'GAME_MESSAGES' : {'channel': <channel_id>, 'message': thing to say}
-        # every night action adds game_message.
-        # If all night actions have finished. Go through and send all those messages.
-        # reset GAME_MESSAGES.
-
-        round_end_str = make_end_round_str(g) + start_day_round(g)
+        #TODO: aggregate of all night action game messages with channel id(dm) in game_state
+        # and then send all messages at once
+        round_end_str = make_end_round_str(game_state) + start_day_round(game_state)
 
         return round_end_str
 
 
-
-def start_night_round(g):
+def start_night_round(game_state):
+    """Start the night round by setting all villas without a night action to completed, set all
+    villas/wolves with a night action to false and send night action PM's
     """
-    1.) Set state to night round.
-    2.) For each player,
-        if it is a character without a night action (ie. 'v'):
-            set completed_night_action: True
-            else completed_night_action: False
-    3.) Send night message.
-    """
-    all_alive = get_all_alive(g)
+    all_alive = get_all_alive(game_state)
 
-    new_g = update_game_state(g, 'round', round='night')
+    new_game = update_game_state(game_state, 'round', round='night')
 
     for player_id in all_alive:
-        new_g = update_game_state(new_g,
+        new_game = update_game_state(new_game,
                     'change_night_action_status',
                     player=player_id,
-                    completed_night_action=does_have_night_action(g, player_id))
+                    completed_night_action=does_have_night_action(game_state, player_id))
 
     return "It is night time. \n Werewolf type_'/dm moderator !kill {who you want to eat}_ \n\n *Talking is NOT Allowed.*"
 
 
-def start_day_round(g):
-    update_game_state(g, 'round', round='day')
+def start_day_round(game_state):
+    update_game_state(game_state, 'round', round='day')
     return "It is now day time. \n type _!vote {username}_. If user has more than half the votes. They die."
 
 
-def player_vote(g, user_id, *args):
-    """
-    ex. *args = (['vote', 'maksym'], )
-    arg_list = args[0]
-    target_name = arg_list[1]
-
-
-    user_name = u.id_dict.get(user_id)
-
-    """
+def player_vote(game_state, user_id, *args):
+    """Update the game_state with a players lynch vote."""
+    user_map = UserMap()
     arg_list = args[0]
 
-    if len(arg_list) < 1: # didn't vote
+    if len(arg_list) < 1:
         return "Have to vote FOR someone.", None
-    elif len(arg_list) > 2: # too many args
+
+    elif len(arg_list) > 2:
         return "Not a valid command.", None
+
     else:
         target_name = arg_list[1]
-        target_id =  u.get(name=target_name) # turn name into id
+        target_id =  user_map.get(name=target_name)
 
-        result, message = is_valid_action(user_id, 'vote', g, target_name=target_name)
+        result, message = is_valid_action(user_id, 'vote', game_state, target_name=target_name)
         if not result:
-            # was not a valid kill
             return message, None
-        else:
-            # player voted
-            # update state
-            # change votes to reflect their vote
-            new_g = update_game_state(g, 'vote', voter=user_id, votee=target_id)
 
-            # after each vote need to check if total
-            # everyone has voted.
-            if did_everyone_vote(new_g):
-                # resolve vote round
-                result_id = resolve_votes(new_g)
+        else:
+            new_game = update_game_state(game_state, 'vote', voter=user_id, votee=target_id)
+
+            if did_everyone_vote(new_game):
+                result_id = resolve_votes(new_game)
+
                 if result_id:
-                    # result is id of player
-                    # set player status to dead.
                     result_name = u.get(user_id=result_id)
 
-                    new_g_2 = update_game_state(new_g, 'player_status', player=result_id, status='dead')
-                    # have to reset all the votes
-                    new_g_3 = update_game_state(new_g_2, 'reset_votes')
+                    set_deaths_in_game_state = update_game_state(new_game, 'player_status', player=result_id, status='dead')
+                    reset_game_votes = update_game_state(set_deaths_in_game_state, 'reset_votes')
 
-                    # tell the players.
                     lynch_str = "%s was lynched." % (result_name)
-                    # pass in game state before votes reset.
-                    return resolve_day_round(new_g_2, alert=lynch_str), None
+                    return resolve_day_round(set_deaths_in_game_state, alert=lynch_str), None
 
                 else:
-                    # list votes returns a tuple ('str', None)
-                    return resolve_day_round(new_g, alert='*No one dies.*'), None
+                    return resolve_day_round(new_game, alert='*No one dies.*'), None
+
             else:
-                # valid vote, but not everyone voted yet.
-                # suggestion to list vote summary every vote.
                 return list_votes(new_g)[0] + '\n\n' + message
+
             return message, None
 
-def resolve_votes(g):
-    """
-    Everyone has voted.
 
-    If anyone has more than half the votes.
-    They die.
+def resolve_votes(game_state):
+    """Reconcile all the votes, lynching the player with the majority of the votes."""
+    votes = get_all_votes(game_state)
 
-    If more than half the people passed then no one dies.
-
-    votes is a dictionary
-    key   - voter_id
-    value - voted_on_id
-    """
-    votes = get_all_votes(g)
-    # count up all the votes
     if votes:
-        c = Counter(votes.values())
-        # c.most_common()
-        # [('b',2), ('a',1), ('c',1)]
-        most_votes_id = c.most_common()[0][0]
-        most_votes_count = c[most_votes_id]
+        count = Counter(votes.values())
+
+        most_votes_id = count.most_common()[0][0]
+        most_votes_count = count[most_votes_id]
         total_votes = len(votes.keys())
+
         if most_votes_count > total_votes // 2:
-            # more than half the votes
-            # they die.
             if most_votes_id == 'pass':
-                return False # no one dies
+                return False
+
             else:
                 return most_votes_id
 
         else:
             return False
 
-    return False # votes was none for some reason.
+    # we shouldn't ever really get here
+    return False
 
 
+def resolve_day_round(game_state, alert=None):
+    """Reconcile all votes for the day and enter night mode."""
+    alive_v = alive_for_village(game_state)
+    alive_w = alive_for_werewolf(game_state)
 
-def resolve_day_round(g, alert=None):
-    """
-    Like resolve_night_round, but for the day!
-
-    """
-    alive_v = alive_for_village(g)
-    alive_w = alive_for_werewolf(g)
-
-    # we want to show vote results.
-    vote_list_str = list_votes(g)[0] + '\n'
+    vote_list_str = list_votes(game_state)[0] + '\n'
 
     if len(alive_w) >= len(alive_v):
-        new_g = update_game_state(g, 'status', status='INACTIVE')
-        new_g = update_game_state(new_g, 'reset_game_state')
+        new_game = update_game_state(game_state, 'status', status='INACTIVE')
+        new_game = update_game_state(new_game, 'reset_game_state')
 
-        return  vote_list_str + make_end_round_str(new_g, alert, 'w') # returns and sends message
+        return  vote_list_str + make_end_round_str(new_game, alert, 'w')
 
     elif len(alive_w) == 0:
-        new_g = update_game_state(g, 'status', status='INACTIVE')
-        new_g = update_game_state(new_g, 'reset_game_state')
+        new_game = update_game_state(game_state, 'status', status='INACTIVE')
+        new_game = update_game_state(new_game, 'reset_game_state')
 
-        return  vote_list_str + make_end_round_str(new_g, alert, 'v') # returns and sends message
+        return  vote_list_str + make_end_round_str(new_game, alert, 'v')
+
     else:
-        # turn it into night and start night round
-
-        round_end_str = vote_list_str + make_end_round_str(g) + start_night_round(g)
-        return round_end_str
-
-
+        return vote_list_str + make_end_round_str(game_state) + start_night_round(game_state)

@@ -3,9 +3,6 @@ import yaml
 import json
 from slackclient import SlackClient
 
-##############
-# user stuff #
-##############
 
 class UserMap:
     """
@@ -63,5 +60,3 @@ def get_user_name(user_id):
     if user_name:
         u.add(user_id, user_name, im)
         return user_name
-
-
