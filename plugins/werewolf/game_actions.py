@@ -258,6 +258,9 @@ def night_kill(game_state, user_id, *args):
     """Night kill the selected player."""
     arg_list = args[0]
 
+    print arg_list
+    print len(arg_list)
+
     if len(arg_list) < 1:
         return "Have to pick a target.", None
 
@@ -269,7 +272,7 @@ def night_kill(game_state, user_id, *args):
 
         target_name = arg_list[1]
         target_id =  user_map.get(name=target_name)
-        result, message = is_valid_action(user_id, 'kill', game_state, target_name=target_name)
+        result, message = is_valid_action(user_id, 'night_kill', game_state, target_name=target_name)
         if not result:
             return message, None
 
