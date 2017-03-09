@@ -42,8 +42,6 @@ def should_create_game(user, action, game_state):
 def should_start_game(user_id, action, game_state):
     """Check if we should start a new game"""
     players = status.players_in_game(game_state)
-    print players
-    print game_state
 
     # min for a good game is 11
     if len(players) < 1:

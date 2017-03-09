@@ -1,17 +1,11 @@
 """
-" all game state change
-" in here.
+Handle all changes to game state.
 """
 
 import redis
 import json
 import copy
 
-
-"""
-game:state
-
-"""
 r_server = redis.Redis('localhost')
 
 class GameLog:
@@ -30,13 +24,12 @@ GAME_STATE = {'players': {},
 game_log = GameLog()
 
 
-
-
 def get_game_state():
     try:
         return json.loads(r_server.get('game:state'))
     except:
         return copy.deepcopy(initial_game_state())
+
 
 def set_game_state(new_game_state):
     global GAME_STATE
@@ -71,10 +64,13 @@ def update_game_state(game_state, action, **kwargs):
 
     def change_player_role(): # 'role'
         target = kwargs['player']
+
         new_role = kwargs['role']
         mutated_g['players'][target]['role'] = new_role
-        if new_role=='v' or new_role=='s' or new_role=='b':
+
+        if new_role=='v' or new_role=='s' or new_role=='a':
             mutated_g['players'][target]['side'] = 'v'
+
         elif new_role=='w':
             mutated_g['players'][target]['side'] = 'w'
 

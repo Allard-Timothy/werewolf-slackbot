@@ -108,7 +108,7 @@ def create_game(game_state, user_id, *kwargs):
         new_game = update_game_state(game_state, 'reset_game_state')
         new_game = update_game_state(new_game, 'status', status='WAITING_FOR_JOIN')
 
-        return 'Waiting for players... \n*Type !join to join.*', None
+        return 'Waiting for players... \n*Type !join to join.*\nhttps://media.giphy.com/media/d2DbJNid60ts4/giphy.gif', None
 
     else:
         return message, None
@@ -125,7 +125,7 @@ def start_game(game_state, user_id, *kwargs):
     num_werewolves = status.alive_for_werewolf(game_state)
 
     p1_str = "_There are *%d* players in the game._\n" % len(players)
-    p2_str = "There are *%d* werewolves in the game._\n" % len(num_werewolves)
+    p2_str = "_There are *%d* werewolves in the game._\n" % len(num_werewolves)
     p3_str = "https://media.giphy.com/media/3o72FkgwrI7P4G1amI/giphy.gif"
     send_message(p1_str + p2_str + p3_str)
 
@@ -144,15 +144,32 @@ def assign_roles(game_state):
     num_of_players = len(total_players)
     seer = None
     angel = None
+    wolf = None
+    villa = None
 
-    # if it's only 2 players that's lame, but at least make them on diff teams
+    # if it's only 2 players that's lame but whatev's
     if num_of_players <= 2:
         if num_of_players == 1:
-            villas = total_players[0]
+            random_ints = range(20)
+            decision = random.choice(random_ints)
+
+            if decision <= 4:
+                villa = total_players[0]
+
+            elif decision >= 5 and decision <= 9:
+                wolf = total_players[0]
+
+            elif decision >= 10 and decision <= 14:
+                seer = total_players[0]
+
+            elif decision >= 15 and decision <= 20:
+                angel = total_players[0]
 
         else:
-            villas = total_players[0]
-            wolves = total_players[1]
+            villa = total_players[0]
+            wolf = total_players[1]
+
+    new_game = copy.deepcopy(game_state)
 
     if num_of_players > 2:
         if num_of_players >= 1 and num_of_players < 13:
@@ -173,17 +190,25 @@ def assign_roles(game_state):
         angel = non_wolves[1]
         villas = [x for x in non_wolves if x != seer and x != angel]
 
-    new_game = copy.deepcopy(game_state)
+        if seer and angel:
+            new_game = update_game_state(new_game, 'role', player=seer, role='s')
+            new_game = update_game_state(new_game, 'role', player=angel, role='a')
 
-    if seer and angel:
-        new_game = update_game_state(new_game, 'role', player=seer, role='s')
-        new_game = update_game_state(new_game, 'role', player=angel, role='a')
+        for villa in villas:
+            new_game = update_game_state(new_game, 'role', player=villa, role='v')
 
-    for villa in villas:
-        new_game = update_game_state(new_game, 'role', player=villa, role='v')
+        for wolf in wolves:
+            new_game = update_game_state(new_game, 'role', player=wolf, role='w')
 
-    for wolf in wolves:
-        new_game = update_game_state(new_game, 'role', player=wolf, role='w')
+    else:
+        if villa:
+            new_game = update_game_state(new_game, 'role', player=villa, role='v')
+        elif wolf:
+            new_game = update_game_state(new_game, 'role', player=wolf, role='w')
+        elif seer:
+            new_game = update_game_state(new_game, 'role', player=seer, role='s')
+        elif angel:
+            new_game = update_game_state(new_game, 'role', player=angel, role='a')
 
     return new_game
 
@@ -193,10 +218,10 @@ def message_everyone_roles(game_state):
     user_map = UserMap()
 
     role_message_mapping = {
-        'v': " Plain Villager",
-        'w': " Werewolf Awoooo!",
-        's': " Seer",
-        'a': " Angel"
+        'v': " Vanilla Villa\nhttps://media.giphy.com/media/26ufgQWWT3BUtSRq0/giphy.gif",
+        'w': " Werewolf\nhttps://media.giphy.com/media/VTGEse4Pt422I/giphy.gif",
+        's': " Seer\nhttps://media.giphy.com/media/bpIWfYfOiHR3G/giphy.gif",
+        'a': " Angel\nhttps://media.giphy.com/media/xbbq3NUIOtTVu/giphy.gif"
     }
 
     def _player_tuple(player_id, game_state):
@@ -378,7 +403,7 @@ def player_vote(game_state, user_id, *args):
                 result_id = resolve_votes(new_game)
 
                 if result_id:
-                    result_name = u.get(user_id=result_id)
+                    result_name = user_map.get(user_id=result_id)
 
                     set_deaths_in_game_state = update_game_state(new_game, 'player_status', player=result_id, status='dead')
                     reset_game_votes = update_game_state(set_deaths_in_game_state, 'reset_votes')

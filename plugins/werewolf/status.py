@@ -74,11 +74,9 @@ def does_have_night_action(game_state, user_id):
 
     w: werewolf (or just alpha wolf)
     s: seer
-    b: bodyguard
     a: angel
-
     """
-    night_action_list = ['w', 's', 'b', 'a']
+    night_action_list = ['w', 's', 'a']
     return player_role(game_state, user_id) in night_action_list
 
 
