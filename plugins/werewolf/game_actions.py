@@ -11,37 +11,21 @@ import time
 from user_map import UserMap, get_user_name
 from validations import mod_valid_action, is_valid_action
 
-from status import (players_in_game,
-                    player_in_game,
-                    is_player_alive,
-                    alive_for_village,
-                    alive_for_werewolf,
-                    for_werewolf,
-                    player_role,
-                    player_side,
-                    player_status,
-                    has_voted,
-                    did_everyone_vote,
-                    get_all_alive,
-                    get_all_votes,
-                    get_current_round,
-                    does_have_night_action)
+import status
 
-
-u = UserMap()
 
 
 def list_players(game_state, user_id, *kwargs):
     """List all the current players in the game."""
     user_map = UserMap()
-    players = players_in_game(game_state)
+    players = status.players_in_game(game_state)
 
-    return '\n'.join([user_map.get(user_id=player_id) + ' | ' + player_status(game_state, player_id) for player_id in players]), None
+    return '\n'.join([user_map.get(user_id=player_id) + ' | ' + status.player_status(game_state, player_id) for player_id in players]), None
 
 
 def list_votes(game_state, *kwargs):
     """List all votes from players int he game."""
-    votes = get_all_votes(game_state)
+    votes = status.get_all_votes(game_state)
 
     out_list = []
     if votes:
@@ -85,8 +69,8 @@ def start_countdown(game_state, user_id, *kwargs):
         if not result:
             return False, message
 
-        all_alive = get_all_alive(game_state)
-        yet_to_vote_list = [player_id for player_id in all_alive if not has_voted(game_state, player_id)]
+        all_alive = status.get_all_alive(game_state)
+        yet_to_vote_list = [player_id for player_id in all_alive if not status.has_voted(game_state, player_id)]
         if len(yet_to_vote_list) > 1:
             return False, 'Countdown cannot start now.'
 
@@ -137,12 +121,13 @@ def start_game(game_state, user_id, *kwargs):
         return message, None
 
     send_message("@channel: Game is starting...")
-    players = players_in_game(game_state)
-    num_werewolves = alive_for_werewolf(game_state)
+    players = status.players_in_game(game_state)
+    num_werewolves = status.alive_for_werewolf(game_state)
 
     p1_str = "_There are *%d* players in the game._\n" % len(players)
     p2_str = "There are *%d* werewolves in the game._\n" % len(num_werewolves)
-    send_message(p1_str + p2_str)
+    p3_str = "https://media.giphy.com/media/3o72FkgwrI7P4G1amI/giphy.gif"
+    send_message(p1_str + p2_str + p3_str)
 
     game_state = update_game_state(game_state, 'status', status='RUNNING')
 
@@ -154,28 +139,50 @@ def start_game(game_state, user_id, *kwargs):
 
 def assign_roles(game_state):
     """Assign all players in the game a role."""
-    total_players = players_in_game(game_state)
-    wolf_div = 1
+    total_players = status.players_in_game(game_state)
+    num_of_wolves = 1
+    num_of_players = len(total_players)
+    seer = None
+    angel = None
 
-    # 3 or fewer wolves for 11 - 23 players
-    if len(total_players) >= 1 and len(total_players) < 23:
-        wolf_div = 4
+    # if it's only 2 players that's lame, but at least make them on diff teams
+    if num_of_players <= 2:
+        if num_of_players == 1:
+            villas = total_players[0]
 
-    # more than 3 wolves for 23+ players
-    elif len(total_players) >= 23:
-        wolf_div = 3
+        else:
+            villas = total_players[0]
+            wolves = total_players[1]
 
-    num_of_wolfs = int(len(total_players) / wolf_div)
+    if num_of_players > 2:
+        if num_of_players >= 1 and num_of_players < 13:
+            num_of_wolves = 2
 
-    created_wolves = random.sample(total_players, num_of_wolfs)
-    created_villas = [player for player in total_players if player not in created_wolves]
+        elif num_of_players >= 13 and num_of_players < 23:
+            num_of_wolves = 3
+
+        elif num_of_players >= 23:
+            num_of_wolves = 6
+
+        wolves = random.sample(total_players, num_of_wolves)
+        non_wolves = [player for player in total_players if player not in created_wolves]
+
+        ramdom.shuffle(non_wolves)
+
+        seer = non_wolves[0]
+        angel = non_wolves[1]
+        villas = [x for x in non_wolves if x != seer and x != angel]
 
     new_game = copy.deepcopy(game_state)
 
-    for villa in created_villas:
+    if seer and angel:
+        new_game = update_game_state(new_game, 'role', player=seer, role='s')
+        new_game = update_game_state(new_game, 'role', player=angel, role='a')
+
+    for villa in villas:
         new_game = update_game_state(new_game, 'role', player=villa, role='v')
 
-    for wolf in created_wolves:
+    for wolf in wolves:
         new_game = update_game_state(new_game, 'role', player=wolf, role='w')
 
     return new_game
@@ -194,9 +201,9 @@ def message_everyone_roles(game_state):
 
     def _player_tuple(player_id, game_state):
 
-        return (user_map.get(user_id=player_id, DM=True), player_role(game_state, player_id))
+        return (user_map.get(user_id=player_id, DM=True), status.player_role(game_state, player_id))
 
-    all_alive = [_player_tuple(player_id, game_state) for player_id in players_in_game(game_state) if is_player_alive(game_state, player_id)]
+    all_alive = [_player_tuple(player_id, game_state) for player_id in status.players_in_game(game_state) if status.is_player_alive(game_state, player_id)]
 
     for im, role in all_alive:
         dm_message = role_message_mapping[role]
@@ -249,6 +256,7 @@ def night_kill(game_state, user_id, *args):
 
 def seer_peek_player(game_state, user_id, *args):
     """Seer can peek a players role during the night."""
+    user_map = UserMap()
     arg_list = args[0]
 
     if len(arg_list) < 1:
@@ -259,7 +267,7 @@ def seer_peek_player(game_state, user_id, *args):
 
     else:
         target_name = arg_list[1]
-        target_id = u.get(name=target_name)
+        target_id = user_map.get(name=target_name)
         result, message = is_valid_action(user_id, 'peek', game_state, target_name=target_name)
 
         if not result:
@@ -287,10 +295,10 @@ def make_end_round_str(game_state, alert=None, game_over=None):
             round_end_str += "\n Game Over. Village wins.\n"
 
         def player_role_string(player_id, game_state):
-            return user_map.get(user_id=player_id) + "%s | %s" % (user_map.get(user_id=player_id), player_role(game_state, player_id))
+            return user_map.get(user_id=player_id) + "%s | %s" % (user_map.get(user_id=player_id), status.player_role(game_state, player_id))
 
-        player_roles = [player_role_string(player_id, game_state) for player_id in players_in_game(game_state)]
-        round_end_str += '\n'.join(player_roles)
+        status.player_roles = [player_role_string(player_id, game_state) for player_id in status.players_in_game(game_state)]
+        round_end_str += '\n'.join(status.player_roles)
 
     return round_end_str
 
@@ -299,8 +307,8 @@ def resolve_night_round(game_state, alert=None):
     """Reconcile all night actions and update the game_state. The game can either continue into
     day mode or it will end with the night actions.
     """
-    alive_v = alive_for_village(game_state)
-    alive_w = alive_for_werewolf(game_state)
+    alive_v = status.alive_for_village(game_state)
+    alive_w = status.alive_for_werewolf(game_state)
 
     if len(alive_w) >= len(alive_v):
         new_game = update_game_state(game_state, 'status', status='INACTIVE')
@@ -326,7 +334,7 @@ def start_night_round(game_state):
     """Start the night round by setting all villas without a night action to completed, set all
     villas/wolves with a night action to false and send night action PM's
     """
-    all_alive = get_all_alive(game_state)
+    all_alive = status.get_all_alive(game_state)
 
     new_game = update_game_state(game_state, 'round', round='night')
 
@@ -334,7 +342,7 @@ def start_night_round(game_state):
         new_game = update_game_state(new_game,
                     'change_night_action_status',
                     player=player_id,
-                    completed_night_action=does_have_night_action(game_state, player_id))
+                    completed_night_action=status.does_have_night_action(game_state, player_id))
 
     return "It is night time. \n Werewolf type_'/dm moderator !kill {who you want to eat}_ \n\n *Talking is NOT Allowed.*"
 
@@ -366,7 +374,7 @@ def player_vote(game_state, user_id, *args):
         else:
             new_game = update_game_state(game_state, 'vote', voter=user_id, votee=target_id)
 
-            if did_everyone_vote(new_game):
+            if status.did_everyone_vote(new_game):
                 result_id = resolve_votes(new_game)
 
                 if result_id:
@@ -382,14 +390,14 @@ def player_vote(game_state, user_id, *args):
                     return resolve_day_round(new_game, alert='*No one dies.*'), None
 
             else:
-                return list_votes(new_g)[0] + '\n\n' + message
+                return list_votes(new_game)[0] + '\n\n' + message, None
 
             return message, None
 
 
 def resolve_votes(game_state):
     """Reconcile all the votes, lynching the player with the majority of the votes."""
-    votes = get_all_votes(game_state)
+    votes = status.get_all_votes(game_state)
 
     if votes:
         count = Counter(votes.values())
@@ -414,8 +422,8 @@ def resolve_votes(game_state):
 
 def resolve_day_round(game_state, alert=None):
     """Reconcile all votes for the day and enter night mode."""
-    alive_v = alive_for_village(game_state)
-    alive_w = alive_for_werewolf(game_state)
+    alive_v = status.alive_for_village(game_state)
+    alive_w = status.alive_for_werewolf(game_state)
 
     vote_list_str = list_votes(game_state)[0] + '\n'
 

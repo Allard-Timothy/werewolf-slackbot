@@ -1,14 +1,4 @@
-from game_actions import(
-    create_game,
-    start_game,
-    list_players,
-    join,
-    night_kill,
-    player_vote,
-    list_votes,
-    start_countdown,
-    seer_peek_player,
-)
+import game_actions
 
 INVALID_COMMAND = 'Not a valid command!'
 
@@ -33,16 +23,16 @@ def command_router(game_state, command, user_id):
     vote(player_vote)  - players attempts to vote.
     """
     router = {
-        "create": create_game,
-        'start': start_game,
-        'players': list_players,
-        'votes': list_votes,
-        "join": join,
-        "countdown": start_countdown,
+        "create": game_actions.create_game,
+        'start': game_actions.start_game,
+        'players': game_actions.list_players,
+        'votes': game_actions.list_votes,
+        "join": game_actions.join,
+        "countdown": game_actions.start_countdown,
 
-        "peek": seer_peek_player,
-        "kill": night_kill,
-        "vote": player_vote
+        "peek": game_actions.seer_peek_player,
+        "kill": game_actions.night_kill,
+        "vote": game_actions.player_vote
     }
 
     if len(command) == 1:

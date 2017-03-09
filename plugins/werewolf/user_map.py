@@ -6,26 +6,14 @@ from slackclient import SlackClient
 
 class UserMap:
     """
-    So we don't have to keep track of two dictionaries.
-    Easiest is just to keep one instance of this in the game state.
-
-    We create this at the beginning of the game.
-
-    So we can do -
-
-    user_id -> name
-    name -> user_id
+    Store all player infor in this user mapping class. That way we can pass this around as needed.
     """
+
     def __init__(self):
         self.r_server = redis.Redis('localhost')
 
     def add(self, user_id, name, DM):
-        """
-        adds
-        user_id -> name
-        name -> user_id
-        DM:user_id -> Direct Message channel.
-        """
+        """Add a user to the UserMap, specifically the user name, user_id, and DM_id."""
         self.r_server.hmset('users:game', {user_id: name, name: user_id, 'DM:'+user_id: DM})
 
     def get(self, user_id=None, name=None, DM=None):
@@ -42,21 +30,21 @@ class UserMap:
 def get_user_name(user_id):
     config = yaml.load(file('rtmbot.conf', 'r'))
     sc = SlackClient(config['SLACK_TOKEN'])
-    u = UserMap()
+    user_map = UserMap()
 
-    def poll_slack_for_user():
+    def get_users_from_slack():
         user_obj = sc.api_call('users.info', user=user_id)
         user_name = user_obj['user']['name']
         im = sc.api_call('im.open', user=user_id)
+
         return user_name, im['channel']['id']
 
     try:
-        user_name, im = poll_slack_for_user()
+        user_name, im = get_users_from_slack()
+    # we really dont want any issues with the slack API to blow up the game
     except Exception as e:
-        print(e)
-        # try one more time.
-        user_name, im = poll_slack_for_user()
+        user_name, im = get_users_from_slack()
 
     if user_name:
-        u.add(user_id, user_name, im)
+        user_map.add(user_id, user_name, im)
         return user_name
