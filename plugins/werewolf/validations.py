@@ -29,7 +29,7 @@ RESPONSE = {
         'need_target': "Need a target",
         'dead_villa': "Dead villas cannot perform peeks",
         'dead_wolf': "Dead wolves cannot perform kills",
-        'peek': "{target_name}'s role is {role}",
+        'peek': "{target_name}'s role is {target_role}",
         'not_seer': "Only the seer may request peeks"
     }
 
@@ -118,14 +118,14 @@ def night_kill(user_id, action, game_state, target_name):
     if not status.player_in_game(game_state,user_id):
         return False, RESPONSE['noop']
 
-    if status.player_role(game_state, user_id) != 'w':
-        return False, RESPONSE['noop']
+    #if status.player_role(game_state, user_id) != 'w':
+    #    return False, RESPONSE['noop']
 
     if not status.is_player_alive(game_state, user_id):
         return False, 'Dead wolves can not kill.'
 
-    if status.get_current_round(game_state) != 'night':
-        return False, RESPONSE['noop']
+    #if status.get_current_round(game_state) != 'night':
+    #    return False, RESPONSE['noop']
 
     if not status.player_in_game(game_state, target_id):
         return False, RESPONSE['noop']
@@ -138,7 +138,15 @@ def night_kill(user_id, action, game_state, target_name):
 
 def peek(user_id, action, game_state, target_name):
     user_map = UserMap()
+    role_map = {
+        's': "the Seer",
+        'w': "a wolf",
+        'v': "a vanilla villa",
+        'a': "the Angel"
+    }
+
     target_id = user_map.get(name=target_name)
+
     user_name = user_map.get(user_id)
 
     if not status.player_in_game(game_state,user_id):
@@ -147,18 +155,16 @@ def peek(user_id, action, game_state, target_name):
     if not status.is_player_alive(game_state, user_id):
         return False, RESPONSE['dead_villa']
 
-    if status.player_role(game_state, user_id) == 's':
-        return False, RESPONSE['noop']
-
-    if status.get_current_round(game_state) != 'night':
-        return False, RESPONSE['noop']
+    #if status.get_current_round(game_state) != 'night':
+    #    return False, RESPONSE['noop']
 
     if status.player_role(game_state, user_id) != 's':
         return False, RESPONSE['not_seer']
 
-    target_role = status.player_role(game_state, target_name)
+    target_role = status.player_role(game_state, target_id)
+    target_str = RESPONSE['peek']
 
-    return True, RESPONSE['peek'].format(target_name, target_role)
+    return True, target_name + "'s role is " + role_map[target_role]
 
 
 MOD_ACTION_MAPPING = {

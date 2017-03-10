@@ -31,7 +31,7 @@ def command_router(game_state, command, user_id):
         "countdown": game_actions.start_countdown,
 
         "peek": game_actions.seer_peek_player,
-        "kill": game_actions.night_kill,
+        "eat": game_actions.night_kill,
         "vote": game_actions.player_vote
     }
 

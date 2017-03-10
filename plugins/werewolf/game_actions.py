@@ -203,11 +203,11 @@ def assign_roles(game_state):
     else:
         if villa:
             new_game = update_game_state(new_game, 'role', player=villa, role='v')
-        elif wolf:
+        if wolf:
             new_game = update_game_state(new_game, 'role', player=wolf, role='w')
-        elif seer:
+        if seer:
             new_game = update_game_state(new_game, 'role', player=seer, role='s')
-        elif angel:
+        if angel:
             new_game = update_game_state(new_game, 'role', player=angel, role='a')
 
     return new_game
@@ -273,12 +273,14 @@ def night_kill(game_state, user_id, *args):
         target_name = arg_list[1]
         target_id =  user_map.get(name=target_name)
         result, message = is_valid_action(user_id, 'night_kill', game_state, target_name=target_name)
+
         if not result:
             return message, None
 
         else:
             new_game = update_game_state(game_state, 'player_status', player=target_id, status='dead')
             eaten_str = "%s was night killed." % (target_name)
+
             return resolve_night_round(new_game, alert=eaten_str), None
 
 
@@ -302,8 +304,10 @@ def seer_peek_player(game_state, user_id, *args):
             return message, None
 
         else:
-            #TODO update game status that seer used peek and send message to seer
-            pass
+            player_channel = user_map.get(user_id=user_id, DM=True)
+            send_message(message, channel=player_channel)
+
+            return "", None
 
 
 def make_end_round_str(game_state, alert=None, game_over=None):
@@ -372,7 +376,7 @@ def start_night_round(game_state):
                     player=player_id,
                     completed_night_action=status.does_have_night_action(game_state, player_id))
 
-    return "It is night time. \n Werewolf type_'/dm moderator !kill {who you want to eat}_ \n\n *Talking is NOT Allowed.*"
+    return "It is night time. \n Werewolves type_'/dm moderator !eat {who you want to eat}_ \n\n *Talking is NOT Allowed.*"
 
 
 def start_day_round(game_state):
