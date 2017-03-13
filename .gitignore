@@ -2,3 +2,5 @@
 /rtmbot.conf
 werewolf/rtmbot.conf
 env
+.DS_Store
+.DS_store
